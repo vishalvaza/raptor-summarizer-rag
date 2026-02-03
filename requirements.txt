@@ -1,0 +1,10 @@
+langchain
+langchain-openai
+chromadb
+scikit-learn
+numpy
+PyPDF2
+pyyaml
+python-dotenv
+reportlab
+pytest
