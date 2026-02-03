@@ -8,31 +8,33 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain.chains import RetrievalQA
 
-class RaptorRAG:
+class RaptorSummarizerRAG:
     """
-    A Large-Scale AI System implementation using RAPTOR:
-    Recursive Abstractive Processing for Tree-Organized Retrieval.
+    RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval.
+    This system builds a hierarchical tree of summaries for deep document context.
     """
     def __init__(self, api_key, model="gpt-4o-mini"):
+        if not api_key or "sk-" not in api_key:
+            raise ValueError("A valid OpenAI API Key is required.")
+        
         os.environ["OPENAI_API_KEY"] = api_key
         self.llm = ChatOpenAI(model=model, temperature=0)
         self.embeddings = OpenAIEmbeddings()
         self.vectorstore = None
+        self.layers_count = 0
 
-    def _cluster_and_summarize(self, texts, layer):
-        """Groups similar texts and summarizes them to create the next tree layer."""
-        # Convert text to vectors
+    def _cluster_and_summarize(self, texts):
+        """Clusters texts using GMM and returns abstractive summaries."""
         vectors = self.embeddings.embed_documents(texts)
         
-        # Determine clusters (at least 1, or 1 per 3 chunks)
+        # Determine optimal clusters (rule of thumb: 1 cluster per 3-5 chunks)
         num_clusters = max(1, len(texts) // 3)
         gm = GaussianMixture(n_components=num_clusters, random_state=42)
         labels = gm.fit_predict(vectors)
 
         summaries = []
         prompt = ChatPromptTemplate.from_template(
-            "Summarize these related points from a larger document into a concise summary "
-            "that captures the main themes:\n\n{context}"
+            "Extract and summarize the core themes from these related document segments:\n\n{context}"
         )
         chain = prompt | self.llm | StrOutputParser()
 
@@ -44,63 +46,71 @@ class RaptorRAG:
         return summaries
 
     def build_tree(self, chunks, max_layers=3):
-        """Builds the recursive tree and indexes all nodes into ChromaDB."""
+        """Builds the hierarchy and stores it in a Vector DB."""
+        print(f"--- Building Knowledge Tree ---")
         all_docs = [Document(page_content=c, metadata={"layer": 0}) for c in chunks]
         current_layer_texts = chunks
 
         for layer in range(1, max_layers + 1):
             if len(current_layer_texts) <= 1:
                 break
-            print(f"Building Tree Layer {layer}...")
-            summaries = self._cluster_and_summarize(current_layer_texts, layer)
+            
+            print(f"Processing Layer {layer} (Summarizing {len(current_layer_texts)} nodes)...")
+            summaries = self._cluster_and_summarize(current_layer_texts)
             all_docs.extend([Document(page_content=s, metadata={"layer": layer}) for s in summaries])
             current_layer_texts = summaries
+            self.layers_count = layer
 
-        # Persistence: This creates a local vector database
+        # Initialize Vector Store
         self.vectorstore = Chroma.from_documents(
             documents=all_docs, 
-            embedding=self.embeddings,
-            collection_name="raptor_collection"
+            embedding=self.embeddings
         )
-        print(f"Tree built with {len(all_docs)} total nodes. Ready for queries.")
+        print(f"✅ Success: Tree built with {len(all_docs)} nodes across {self.layers_count + 1} layers.\n")
 
-    def answer(self, query):
-        """Performs retrieval across all layers of the tree."""
+    def query(self, question):
+        """Performs RAG by searching across all layers of the hierarchy."""
         if not self.vectorstore:
-            return "Error: You must build the tree index first."
+            return "Index not found."
             
         qa = RetrievalQA.from_chain_type(
             llm=self.llm, 
-            retriever=self.vectorstore.as_retriever(search_kwargs={"k": 5})
+            retriever=self.vectorstore.as_retriever(search_kwargs={"k": 4})
         )
-        result = qa.invoke(query)
-        return result["result"]
+        return qa.invoke(question)["result"]
 
-# --- SAMPLE EXECUTION ---
-if __name__ == "__main__":
-    # 1. Configuration
-    API_KEY = "sk-your-openai-key-here" # Replace with your actual key
-    
-    # 2. Sample data representing a long document split into chunks
-    sample_data = [
-        "Project X started in 2022 with a budget of $5 million focused on solar efficiency.",
-        "By 2023, the team discovered a new perovskite structure that boosted output by 12%.",
-        "The lead scientist, Dr. Aris, noted that the stability of cells improved significantly.",
-        "Market analysis shows a growing demand for solar tech in residential areas.",
-        "Current challenges include high manufacturing costs and supply chain delays for glass.",
-        "The board has approved an additional $2 million for 2025 to scale production.",
-        "A new factory is planned in Arizona to minimize logistics costs.",
-        "The goal is to reach 25% efficiency by the end of the decade."
+# ==========================================
+# TEST SUITE & VALIDATION
+# ==========================================
+def run_validation_test(api_key):
+    # Sample Dataset: Information about a fictional deep-sea mission
+    test_data = [
+        "Mission 'Abyss-2026' launched in Jan 2026 to explore the Mariana Trench.",
+        "The primary vessel is the 'Titan-9', a submersible capable of 12,000m depth.",
+        "Lead biologist Dr. Sarah Chen is searching for bioluminescent microbes.",
+        "Budget for the mission is $45 million, funded by the Global Ocean Institute.",
+        "The mission found a new species of jelly-fish at 8,000m with metallic scales.",
+        "Extreme pressure at 10,000m caused a minor leak in the external sensor array.",
+        "Data indicates that deep-sea temperatures are rising faster than expected.",
+        "Future missions plan to establish a permanent robotic outpost by 2030."
     ]
 
-    # 3. Initialize and Run
-    app = RaptorRAG(api_key=API_KEY)
-    app.build_tree(sample_data)
+    engine = RaptorSummarizerRAG(api_key=api_key)
     
-    print("\n" + "="*50)
-    print("QUERY 1: What is the financial history and future of Project X?")
-    print("RESPONSE:", app.answer("What is the financial history and future of Project X?"))
+    # 1. Validate Tree Construction
+    engine.build_tree(test_data, max_layers=2)
     
-    print("\nQUERY 2: Who is the lead scientist and what was their main finding?")
-    print("RESPONSE:", app.answer("Who is the lead scientist and what was their main finding?"))
-    print("="*50)
+    # 2. Test Specific Retrieval (Leaf Node)
+    print("Test 1: Specific Fact")
+    ans1 = engine.query("What is the name of the submersible and its depth limit?")
+    print(f"Q: Submersible name?\nA: {ans1}\n")
+
+    # 3. Test General/Thematic Retrieval (Summary Node)
+    print("Test 2: High-Level Summary")
+    ans2 = engine.query("Provide a broad overview of the Abyss-2026 mission objectives and findings.")
+    print(f"Q: Mission Overview?\nA: {ans2}\n")
+
+if __name__ == "__main__":
+    # Replace with your key to test
+    MY_KEY = "sk-YOUR-KEY-HERE" 
+    run_validation_test(MY_KEY)
