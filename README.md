@@ -1,32 +1,43 @@
 # Raptor-Summarizer-RAG 🦖
 
-A high-performance Retrieval-Augmented Generation (RAG) system that implements the **RAPTOR** (Recursive Abstractive Processing for Tree-Organized Retrieval) architecture. 
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Framework: LangChain](https://img.shields.io/badge/Framework-LangChain-green.svg)](https://python.langchain.com/)
 
-Standard RAG struggles with large documents because it only looks at small, isolated chunks. This system solves that by building a "Tree of Knowledge," allowing the AI to understand both the forest and the trees.
+An advanced **Retrieval-Augmented Generation (RAG)** system implementing the **RAPTOR** (Recursive Abstractive Processing for Tree-Organized Retrieval) architecture. This project enables high-performance summarization and semantic query answering for massive datasets by building a hierarchical knowledge tree.
 
+## 🌟 Why RAPTOR?
+Standard RAG systems often "lose the forest for the trees" because they only retrieve small, isolated text chunks. **RAPTOR** solves this by:
+- **Recursive Summarization**: Building layers of summaries on top of raw data.
+- **Thematic Clustering**: Grouping related information using Gaussian Mixture Models (GMM).
+- **Global & Local Context**: Allowing the AI to answer broad thematic questions (using top-level summaries) or granular factual questions (using leaf nodes) simultaneously.
 
-
-## 🌟 Key Features
-- **Recursive Summarization**: Automatically generates hierarchical layers of context.
-- **Intelligent Clustering**: Uses Gaussian Mixture Models (GMM) to group semantically similar topics before summarizing.
-- **Multi-Resolution Retrieval**: Retrieves specific facts (from bottom layers) or global themes (from top layers) dynamically.
-- **Context-Aware**: Ideal for long-form documents like books, legal papers, or technical manuals.
+---
 
 ## 🏗️ Architecture
-1. **Layer 0**: Raw text chunks (Leaf nodes).
-2. **Clustering**: Machine learning (GMM) identifies related chunks.
-3. **Abstraction**: LLM summarizes clusters to create a higher-level layer.
-4. **Recursion**: Step 2 and 3 repeat until a "Root Summary" is created.
-5. **Indexing**: All layers are indexed in a Chroma Vector Database for hybrid retrieval.
+The system organizes your documents into a tree-like hierarchy:
 
 
 
-## 🚀 Getting Started
+1. **Leaf Nodes (Layer 0)**: Original document chunks.
+2. **Clustering**: Semantic grouping of nodes using GMM and dimensionality reduction.
+3. **Summarization**: LLM-generated abstractive summaries for each cluster.
+4. **Recursive Indexing**: The process repeats until a global summary is achieved.
 
-### Prerequisites
-- Python 3.9+
-- OpenAI API Key
 
-### Installation
-```bash
-pip install langchain langchain-openai langchain-community chromadb scikit-learn numpy
+
+---
+
+## 📂 Project Structure
+```text
+raptor-summarizer-rag/
+├── src/
+│   └── raptor_rag/
+│       ├── engine.py       # Core RAPTOR tree-building & query logic
+│       └── utils.py        # PDF extraction & text chunking utilities
+├── config/
+│   └── settings.yaml       # AI model and tree hyperparameters
+├── data/                   # Directory for input PDF documents
+├── tests/                  # Automated validation scripts
+├── main.py                 # Interactive CLI & validation entry point
+└── requirements.txt        # Project dependencies
